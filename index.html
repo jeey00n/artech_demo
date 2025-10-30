@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>아르테크 — 모바일 전용 샘플</title>
+  <style>
+    :root { --bg:#0b1220; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#38bdf8; }
+    *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+    .wrap{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{width:100%;max-width:440px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    .pad{padding:20px}
+    h1{font-size:20px;margin:0 0 6px}
+    p{margin:8px 0;color:var(--muted);line-height:1.5}
+    button,input[type=file]{appearance:none;border:0;border-radius:14px;padding:14px 16px;background:var(--accent);color:#06121a;font-weight:700;cursor:pointer}
+    .row{display:flex;gap:12px;align-items:center}
+    .hidden{display:none !important}
+    .notice{padding:16px;border-radius:14px;background:#181f2f;border:1px solid rgba(255,255,255,.06);color:var(--text)}
+    .qr{width:140px;height:140px;border-radius:12px;background:conic-gradient(from 90deg,#111 0 25%,#222 0 50%,#111 0 75%,#222 0);display:flex;align-items:center;justify-content:center;color:#fff;opacity:.75}
+    .footer{margin-top:16px;color:var(--muted);font-size:12px;text-align:center}
+    .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);margin:16px 0}
+    .ghost{opacity:.55}
+  </style>
+</head>
+<body>
+  <div id="app" class="wrap">
+    <div class="card">
+      <div class="pad">
+        <h1>아르테크 — 모바일 전용 샘플</h1>
+        <p class="ghost">골동품 이미지를 업로드하면 AI 1차 감정 결과 요약을 보여주는 데모 화면입니다.</p>
+        <div class="divider"></div>
+
+        <!-- Desktop/Large-screen lock -->
+        <div id="desktopLock" class="notice hidden">
+          <p style="font-weight:700">이 서비스는 모바일 전용입니다 📱</p>
+          <p>스마트폰으로 아래 주소를 열어 접속하세요.</p>
+          <div class="row" style="margin:12px 0;justify-content:space-between">
+            <div>
+              <p class="ghost" style="margin:0">현재 페이지 URL</p>
+              <p id="pageUrl" style="word-break:break-all"></p>
+            </div>
+            <div class="qr" aria-hidden="true">QR</div>
+          </div>
+          <p class="footer">※ 개발·심사용으로 PC에서 확인이 필요하면 <code>?allowDesktop=1</code> 또는 <code>#force</code> 를 URL 뒤에 붙이세요.</p>
+        </div>
+
+        <!-- Mobile UI -->
+        <div id="mobileUI" class="hidden">
+          <p style="margin-top:0">샘플 입력</p>
+          <input id="file" type="file" accept="image/*" capture="environment" />
+          <div id="preview" style="margin-top:12px"></div>
+          <div id="result" class="notice hidden" style="margin-top:12px"></div>
+        </div>
+
+        <div class="footer">© Artech — demo</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Mobile-only gate (client side) ---
+    (function(){
+      const ua = navigator.userAgent || navigator.vendor || window.opera;
+      // Include KakaoTalk / Kakao Browser signatures
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|KAKAOTALK|KAKAOBROWSER/i.test(ua);
+      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const smallScreen = Math.min(window.innerWidth, window.innerHeight) <= 1024;
+      const url = new URL(window.location.href);
+      const allowDesktop = url.searchParams.get('allowDesktop') === '1' || url.hash.includes('force');
+
+      const mobileUI = document.getElementById('mobileUI');
+      const desktopLock = document.getElementById('desktopLock');
+      document.getElementById('pageUrl').textContent = window.location.href.split('?')[0];
+
+      const pass = ((isMobileUA || hasTouch) && smallScreen) || allowDesktop;
+      if(pass){ mobileUI.classList.remove('hidden'); }
+      else { desktopLock.classList.remove('hidden'); }
+
+      // Debug panel to inspect detection states
+      if (url.hash.includes('debug')) {
+        const dbg = document.createElement('pre');
+        dbg.style.padding='12px';
+        dbg.style.background='#0f172a';
+        dbg.style.border='1px solid rgba(255,255,255,.08)';
+        dbg.style.borderRadius='12px';
+        dbg.style.marginTop='12px';
+        dbg.textContent = [
+          `UA: ${ua}`,
+          `isMobileUA: ${isMobileUA}`,
+          `hasTouch: ${hasTouch}`,
+          `smallScreen: ${smallScreen} (${window.innerWidth}x${window.innerHeight})`,
+          `allowDesktop: ${allowDesktop}`,
+          `PASS: ${pass}`
+        ].join('\n');
+        document.querySelector('.pad').appendChild(dbg);
+      }
+    })();
+
+    // --- Very lightweight demo logic ---
+    (function(){
+      const fileInput = document.getElementById('file');
+      const preview = document.getElementById('preview');
+      const result = document.getElementById('result');
+      if(!fileInput) return;
+
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if(!file) return;
+        // show preview
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.alt = '업로드 이미지 미리보기';
+        img.style.maxWidth = '100%';
+        img.style.borderRadius = '14px';
+        img.onload = () => URL.revokeObjectURL(img.src);
+        preview.innerHTML = '';
+        preview.appendChild(img);
+
+        // fake inference placeholder — replace with real API later
+        await new Promise(r=>setTimeout(r, 500));
+        result.classList.remove('hidden');
+        result.innerHTML = '<strong>AI 1차 감정(샘플)</strong><br>• 유형: 도자기(추정)<br>• 시대: 조선 후기(추정)<br>• 유사 사례: 3건 매칭<br><span class="ghost">※ 데모 텍스트 — 추후 실제 모델 연동</span>';
+      });
+    })();
+  </script>
+</body>
+</html>
