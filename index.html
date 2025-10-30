@@ -127,12 +127,123 @@
         preview.innerHTML = '';
         preview.appendChild(img);
 
-        // fake inference placeholder — replace with real API later
-        await new Promise(r=>setTimeout(r, 500));
+        // 1) 파일명(확장자 제외)으로 DB 자동검색 시도
+        const base = (file.name || '').split('.')[0];
+        if (window.searchDBThenRender && window.searchDBThenRender(base)) {
+          // 매칭되어 DB 결과가 그려졌으므로 여기서 끝!
+          return;
+        }
+
+        // 2) 매칭 실패 시에만 샘플 문구 표시 (fallback)
         result.classList.remove('hidden');
         result.innerHTML = '<strong>AI 1차 감정(샘플)</strong><br>• 유형: 도자기(추정)<br>• 시대: 조선 후기(추정)<br>• 유사 사례: 3건 매칭<br><span class="ghost">※ 데모 텍스트 — 추후 실제 모델 연동</span>';
       });
     })();
+  </script>
+  <script>
+    // --- Lightweight DB search module ---
+    (function(){
+      const fileInput = document.getElementById('file');
+      const preview   = document.getElementById('preview');
+      const result    = document.getElementById('result');
+      const q         = document.getElementById('q');
+      const btnSearch = document.getElementById('btnSearch');
+      const list      = document.getElementById('list');
+      const searchInfo= document.getElementById('searchInfo');
+      if(!q || !btnSearch) return;
+
+      let DB = [];
+      // 1) db.json 로드 (루트에 두면 ./db.json 경로)
+      fetch('./db.json', {cache:'no-store'})
+        .then(r => r.ok ? r.json() : [])
+        .then(json => {
+          DB = Array.isArray(json) ? json : (json.items || []);
+          if(DB.length){ searchInfo.textContent = `DB 로드됨: ${DB.length}건`; }
+        })
+        .catch(()=>{ searchInfo.textContent = 'db.json을 찾지 못했습니다. (선택사항)'; });
+
+      // 렌더링 유틸
+      function renderItem(it){
+        result.classList.remove('hidden');
+        result.innerHTML = `
+          <strong>${it.name||'제목 없음'}</strong><br>
+          • 유형: ${it.type||'-'}<br>
+          • 시대/연대: ${it.era||'-'}<br>
+          • 소장번호: ${it.code||'-'}<br>
+          <div style="margin-top:8px">${(it.desc||'').replace(/\n/g,'<br>')}</div>
+          ${it.images && it.images.length
+            ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                ${it.images.slice(0,4).map(src=>`<img src="${src}" alt="ref" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,.1)">`).join('')}
+              </div>`
+            : '' }
+        `;
+      }
+      function renderList(items){
+        list.innerHTML = '';
+        if(!items.length){ list.innerHTML = '<p class="ghost">검색 결과가 없습니다.</p>'; return; }
+        const frag = document.createDocumentFragment();
+        items.slice(0,20).forEach(it => {
+          const card = document.createElement('div');
+          card.className = 'notice';
+          card.style.cursor = 'pointer';
+          card.style.marginTop = '8px';
+          card.innerHTML = `<div style="display:flex;align-items:center;gap:10px">
+            ${it.thumbnail ? `<img src="${it.thumbnail}" alt="thumb" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,.1)">` : ''}
+            <div>
+              <div style="font-weight:700">${it.name||'(제목 없음)'}</div>
+              <div class="ghost" style="font-size:12px">${[it.code,it.type,it.era].filter(Boolean).join(' · ')}</div>
+            </div>
+          </div>`;
+          card.addEventListener('click',()=> renderItem(it));
+          frag.appendChild(card);
+        });
+        list.appendChild(frag);
+      }
+      function searchDB(keyword){
+        const kw = (keyword||'').trim().toLowerCase();
+        if(!kw){ list.innerHTML = '<p class="ghost">검색어를 입력하세요.</p>'; return; }
+        const items = DB.filter(it => {
+          const hay = `${it.name||''} ${it.type||''} ${it.era||''} ${it.code||''} ${it.desc||''}`.toLowerCase();
+          return kw.split(/\s+/).every(k => hay.includes(k));
+        });
+        renderList(items);
+      }
+
+      btnSearch.addEventListener('click', ()=> searchDB(q.value));
+      q.addEventListener('keydown', e => { if(e.key==='Enter') searchDB(q.value); });
+
+      // 이미지 업로드 시 파일명으로 자동 검색(선택)
+      fileInput?.addEventListener('change', e => {
+        const file = e.target.files && e.target.files[0];
+        if(!file) return;
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.alt = '업로드 이미지 미리보기';
+        img.style.maxWidth = '100%';
+        img.style.borderRadius = '14px';
+        img.onload = () => URL.revokeObjectURL(img.src);
+        preview.innerHTML = '';
+        preview.appendChild(img);
+
+        const base = (file.name||'').split('.')[0];
+        if(DB.length && base){ searchDB(base); }
+      });
+    })();
+    window.searchDBThenRender = (kw) => {
+      const keyword = (kw||'').trim().toLowerCase();
+      if(!keyword) return false;
+      const items = DB.filter(it => {
+        const hay = `${it.name||''} ${it.type||''} ${it.era||''} ${it.code||''} ${it.desc||''}`.toLowerCase();
+        return keyword.split(/\s+/).every(k => hay.includes(k));
+      });
+      if(items.length){
+        renderList(items);
+        // 첫 항목 상세를 바로 출력(원하면 클릭 유도만 하고 싶으면 이 줄을 빼도 됨)
+        renderItem(items[0]);
+        return true; // 찾았다!
+      }
+      return false; // 못 찾았다
+    };
   </script>
 </body>
 </html>
